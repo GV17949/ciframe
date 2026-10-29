@@ -2,3 +2,5 @@ static/assets/vendor
 .venv
 *.pyc
 __pycache__/
+data/sequencias.db
+data/sequencias.db-*

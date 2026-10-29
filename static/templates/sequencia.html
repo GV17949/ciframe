@@ -3,6 +3,19 @@
     <div class="col-sm-6 col-md-4 viewWindow-panel viewWindow-panel-C">
       <div class="viewWindow-panel-container">
         <h4 class="text-center">Aponte uma sequencia de acordes</h4>
+        <form class="form-inline text-center" ng-submit="Sequencia.cadastrar()" style="margin-bottom: 15px;">
+          <div class="form-group">
+            <label for="nova-sequencia" class="sr-only">Nova sequência de acordes</label>
+            <input id="nova-sequencia" type="text" class="form-control input-sm" placeholder="Nova sequência (ex.: Dm,G,C)"
+              ng-model="Sequencia.novaSequencia" maxlength="120" aria-describedby="erro-cadastro"
+              ng-disabled="Sequencia.enviandoCadastro">
+          </div>
+          <button type="submit" class="btn btn-default btn-sm" ng-disabled="Sequencia.enviandoCadastro">
+            {{Sequencia.enviandoCadastro ? 'Cadastrando...' : 'Cadastrar'}}
+          </button>
+          <p id="erro-cadastro" class="text-danger" role="alert" ng-if="Sequencia.erroCadastro">{{Sequencia.erroCadastro}}</p>
+        </form>
+        <p class="text-danger" role="alert" ng-if="Sequencia.erroCatalogo">{{Sequencia.erroCatalogo}}</p>
         <div class="acordes-container" ng-repeat='sequencia in Sequencia.sequenciasFamosas' ng-click="Sequencia.pesquisarPorSequencia(sequencia)">
           <df-hex acorde="{{acordeon.acorde}}" acorde-color="{{acordeon.cor}}" acorde-checked="Sequencia.temAcorde(acordeon)" ng-repeat="acordeon in sequencia.acordes"></df-hex>
         </div>
@@ -40,7 +53,7 @@
         <div class="row row-in">
           <div class="col-sm-6 col-lg-4"
             ng-repeat="music in Sequencia.musics | orderBy:'-popularidade'"
-            ng-hide="music.diferenca.length">
+            ng-hide="music.diferenca && music.diferenca.length">
 
               <div class="music-card" ng-click="Sequencia.goToLirics(music)">
                 <div class="row row-in">

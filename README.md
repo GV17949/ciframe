@@ -30,6 +30,18 @@ python main.py
 
 Acesse [http://localhost:5000](http://localhost:5000).
 
+### Catálogo de sequências
+
+As sequências de acordes (as 6 originais e as cadastradas em `#/porsequencia`)
+ficam em `data/sequencias.db` (SQLite), criado e semeado no primeiro start. O
+arquivo vive na camada gravável do container: sobrevive a `stop`/`start` e
+`restart`, mas é perdido ao remover o container (`rm` + novo `run`) ou ao
+rebuildar a imagem. As músicas e gêneros continuam vindo do CSV em memória.
+
+Endpoints do catálogo: `GET /sequencias` (lista `[{id, acordes}]`) e
+`POST /sequencias` com `{"acordes": "Dm,G,C"}` (`201` criado, `400` inválido,
+`409` duplicada).
+
 ---
 
 Para convenções de contribuição, veja [CONTRIB.md](CONTRIB.md). Licença: [LICENSE](LICENSE).

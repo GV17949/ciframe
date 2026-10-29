@@ -1,41 +1,13 @@
 angular.module('deciframeApp').controller('SequenciaController', function($http, $window, ngProgressFactory, $anchorScroll, $location, GENEROS) {
-  var sequencia1 = {
-    'index': 1,
-    'acordes': [
-      { 'acorde': 'Bm', 'cor': '#2E1C74' },
-      { 'acorde': 'G',  'cor': '#2E1C74' },
-      { 'acorde': 'D',  'cor': '#2E1C74' },
-      { 'acorde': 'A',  'cor': '#2E1C74' }
-  ]};
-  var sequencia2 = {
-    'index': 1,
-    'acordes': [
-      { 'acorde': 'C',  'cor': '#2E1C74' },
-      { 'acorde': 'G',  'cor': '#2E1C74' },
-      { 'acorde': 'Am', 'cor': '#2E1C74' },
-      { 'acorde': 'F',  'cor': '#2E1C74' }
-  ]};
-  var sequencia3 = {
-    'index': 1,
-    'acordes': [
-      { 'acorde': 'Gm', 'cor': '#2E1C74' },
-      { 'acorde': 'F',  'cor': '#2E1C74' }
-  ]};
-  var sequencia4 = {
-    'index': 1,
-    'acordes': [
-      { 'acorde': 'C',  'cor': '#2E1C74' },
-      { 'acorde': 'C7', 'cor': '#2E1C74' },
-      { 'acorde': 'F',  'cor': '#2E1C74' },
-      { 'acorde': 'Fm', 'cor': '#2E1C74' }
-  ]};
+  var COR_ACORDE = '#2E1C74';
   var vm = this;
+
   vm.sequenciasFamosas = [];
-  vm.sequenciasFamosas.push(sequencia1);
-  vm.sequenciasFamosas.push(sequencia2);
-  vm.sequenciasFamosas.push(sequencia3);
-  vm.sequenciasFamosas.push(sequencia4);
   vm.minhaSequencia = {};
+  vm.novaSequencia = "";
+  vm.erroCadastro = "";
+  vm.erroCatalogo = "";
+  vm.enviandoCadastro = false;
   vm.isSearching = false;
   vm.showSearchResultsCount = false;
   vm.esfigeSpeech =  "";
@@ -43,6 +15,37 @@ angular.module('deciframeApp').controller('SequenciaController', function($http,
   vm.generos = GENEROS;
   vm.meuGenero = "";
   vm.progressbar = ngProgressFactory.createInstance();
+
+  var montarSequencia = function(sequencia) {
+    var acordes = sequencia.acordes.split(',');
+    return {
+      'id': sequencia.id,
+      'acordes': acordes.map(function(acorde) {
+        return { 'acorde': acorde.trim(), 'cor': COR_ACORDE };
+      })
+    };
+  }
+
+  var carregarSequencias = function(selecionarId) {
+    $http.get('sequencias')
+      .success(function(data) {
+        vm.erroCatalogo = "";
+        vm.sequenciasFamosas = data.map(montarSequencia);
+        if (selecionarId !== undefined) {
+          for (var i = 0; i < vm.sequenciasFamosas.length; i++) {
+            if (vm.sequenciasFamosas[i].id === selecionarId) {
+              vm.pesquisarPorSequencia(vm.sequenciasFamosas[i]);
+              break;
+            }
+          }
+        }
+      })
+      .error(function() {
+        vm.erroCatalogo = "Não foi possível carregar o catálogo de sequências.";
+      });
+  }
+
+  carregarSequencias();
 
   vm.temAcorde = function(acorde) {
     if (vm.minhaSequencia.acordes) {
@@ -57,7 +60,37 @@ angular.module('deciframeApp').controller('SequenciaController', function($http,
     for (var i = 0; i < chords.length; i++) {
       str = str.concat(chords[i].acorde, ',');
     }
-    return str.substring(0, str.length-1);
+    return encodeURIComponent(str.substring(0, str.length-1));
+  }
+
+  vm.cadastrar = function() {
+    if (vm.enviandoCadastro) {
+      return;
+    }
+    vm.erroCadastro = "";
+    if (!vm.novaSequencia || !vm.novaSequencia.trim()) {
+      vm.erroCadastro = "Informe uma sequência de acordes.";
+      return;
+    }
+
+    vm.enviandoCadastro = true;
+    $http.post('sequencias', { 'acordes': vm.novaSequencia })
+      .success(function(nova) {
+        vm.novaSequencia = "";
+        carregarSequencias(nova.id);
+      })
+      .error(function(data, status) {
+        if (status === 409) {
+          vm.erroCadastro = "Essa sequência já está cadastrada.";
+        } else if (status === 400) {
+          vm.erroCadastro = (data && data.erro) || "Sequência inválida.";
+        } else {
+          vm.erroCadastro = "Ops! Algo errado.";
+        }
+      })
+      .finally(function() {
+        vm.enviandoCadastro = false;
+      });
   }
 
   vm.pesquisarPorSequencia = function(sequencia) {
@@ -72,7 +105,7 @@ angular.module('deciframeApp').controller('SequenciaController', function($http,
     var apiUrl = "";
     var searchString = "similares?sequencia=".concat(createChordsString(vm.minhaSequencia.acordes));
     if (vm.meuGenero !== "" && vm.meuGenero !== null) {
-      searchString += "&generos="+vm.meuGenero;
+      searchString += "&generos=" + encodeURIComponent(vm.meuGenero);
     }
     $http.get(apiUrl.concat(searchString))
       .success(function(data) {

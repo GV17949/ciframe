@@ -5,6 +5,7 @@ import sys
 from musica import *
 from collections import OrderedDict
 import unicodedata
+import sequencias
 
 app = Flask(__name__)
 
@@ -37,12 +38,6 @@ TAM_PAGINA = 100
 genero_musicas = {}
 generos = set()
 acordes = set()
-sequencias = {'BmGDA' : 0,
-        'CGAmF' : 1,
-        'EmG' : 2,
-        'CA7DmG7' : 3,
-        'GmF' : 4,
-        'CC7FFm' : 5}
 
 musicas_dict = {}
 
@@ -96,6 +91,13 @@ for k,v in genero_musicas.items():
     genero_musicas[k].sort(key = lambda x : x.popularidade, reverse = True)
 
 f.close()
+
+# catálogo de sequências: persistido em SQLite (data/sequencias.db)
+sequencias.criar_schema()
+sequencias.semear()
+
+# mapa minúsculo -> forma do corpus, usado para validar o cadastro
+acordes_lower = {acorde.lower(): acorde for acorde in acordes}
 
 
 @app.route('/')
@@ -153,7 +155,7 @@ def remover_combinantes(string):
     exemplo 2: /musica'''
 @app.route('/musicas')
 def get_musicas():
-    return json.dumps([v.__dict__ for v in musicas.values()])
+    return json.dumps([v.to_dict() for v in musicas.values()])
 
 @app.route('/generos')
 def get_generos():
@@ -163,9 +165,39 @@ def get_generos():
 def get_acordes():
     return json.dumps(list(acordes))
 
+@app.route('/sequencias')
+def get_sequencias():
+    return json.dumps(sequencias.listar())
+
+@app.route('/sequencias', methods=['POST'])
+def post_sequencias():
+    dados = request.get_json(silent=True)
+
+    if not isinstance(dados, dict):
+        return json.dumps({'erro': 'envie um objeto JSON com o campo "acordes"'}), 400
+
+    texto = dados.get('acordes')
+
+    if not isinstance(texto, str):
+        return json.dumps({'erro': 'informe "acordes" como string'}), 400
+
+    tokens = sequencias.normalizar(texto)
+    if not 2 <= len(tokens) <= 12:
+        return json.dumps({'erro': 'a sequência deve ter de 2 a 12 acordes'}), 400
+    if any(token == '' for token in tokens):
+        return json.dumps({'erro': 'acorde vazio na sequência'}), 400
+    if any(token.lower() not in acordes_lower for token in tokens):
+        return json.dumps({'erro': 'acorde desconhecido na sequência'}), 400
+
+    try:
+        nova = sequencias.inserir(texto)
+    except sequencias.SequenciaDuplicada:
+        return json.dumps({'erro': 'sequência já cadastrada'}), 409
+    return json.dumps(nova), 201
+
 @app.route('/musica/<m_id>/')
 def get_musica(m_id):
-    return json.dumps(musicas[m_id].__dict__)
+    return json.dumps(musicas[m_id].to_dict())
 
 @app.route('/similares')
 def get_similares():
@@ -188,25 +220,26 @@ def get_similares():
         musica = musicas[id_musica_tag]
         acordes = musica.acordes
     elif sequencia_tag:
-        acordes = sequencia_tag.replace(',','')
-        similares = []
-
-        if acordes in sequencias:
-            id_seq = sequencias[acordes]
-            similares = get_pagina(get_similares_por_sequencia(id_seq, generos_key), pagina_tag)
-        return json.dumps(similares)
+        if not sequencias.buscar(sequencia_tag):
+            return json.dumps([])
+        similares = get_similares_por_sequencia(
+            sequencias.normalizar(sequencia_tag), generos_key)
+        return json.dumps(get_pagina(similares, pagina_tag))
 
     similares = get_similares(acordes, generos_key, id_musica_tag)
 
     return json.dumps(get_pagina(similares, pagina_tag))
 
-def get_similares_por_sequencia(id_seq, generos_key):
+def get_similares_por_sequencia(seq_tokens, generos_key):
     # filtra para melhor desempenho
     collection = apply_filtro(musicas.values(), generos_key)
 
+    # prepara bloco/vocabulário uma única vez para todas as músicas
+    seq_preparada = sequencias.preparar(seq_tokens)
+
     similares = []
     for musica in collection:
-        if str(id_seq) in musica.seqs_famosas:
+        if sequencias.aparece(seq_preparada, musica):
             similar = {
                 'id_unico_musica' : musica.id_unico_musica,
                 'id_artista' : musica.id_artista,
@@ -274,6 +307,8 @@ def apply_filtro(musicas, generos_key):
 @app.after_request
 def add_header(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return response
 
 if __name__ == '__main__':
